@@ -15,8 +15,190 @@ try:
     HAS_WINOCR = True
 except ImportError:
     HAS_WINOCR = False
+def run_cloud_ocr(image_path: str) -> Optional[Dict[str, Any]]:
+    """
+    Cloud OCR fallback for Vercel/Linux environments.
+    Uses OCR.space and returns the same internal structure
+    expected by LexMetrix.
+    """
+    import os
+    import io
+    import httpx
+    from PIL import Image
 
+    api_key = os.environ.get("OCR_SPACE_API_KEY")
+
+    if not api_key:
+        return None
+
+    try:
+        # OCR.space free tier has a 1 MB image limit.
+        # Resize/compress before upload so normal phone/package
+        # photos remain compatible.
+        img = Image.open(image_path).convert("RGB")
+
+        max_dimension = 1800
+        if max(img.size) > max_dimension:
+            ratio = max_dimension / max(img.size)
+            img = img.resize(
+                (int(img.width * ratio), int(img.height * ratio)),
+                Image.Resampling.LANCZOS
+            )
+
+        quality = 85
+
+        while True:
+            buffer = io.BytesIO()
+            img.save(buffer, format="JPEG", quality=quality, optimize=True)
+
+            if buffer.tell() <= 950_000 or quality <= 55:
+                break
+
+            quality -= 5
+
+        image_bytes = buffer.getvalue()
+
+        files = {
+            "file": (
+                "package.jpg",
+                image_bytes,
+                "image/jpeg"
+            )
+        }
+
+        data = {
+            "language": "eng",
+            "isOverlayRequired": "true",
+            "detectOrientation": "true",
+            "scale": "true",
+            "OCREngine": "2",
+            "isTable": "false"
+        }
+
+        headers = {
+            "apikey": api_key
+        }
+
+        with httpx.Client(timeout=60.0) as client:
+            response = client.post(
+                "https://api.ocr.space/parse/image",
+                headers=headers,
+                data=data,
+                files=files
+            )
+
+        response.raise_for_status()
+        payload = response.json()
+
+        if payload.get("IsErroredOnProcessing"):
+            print(
+                "OCR.space processing error:",
+                payload.get("ErrorMessage"),
+                payload.get("ErrorDetails")
+            )
+            return None
+
+        parsed_results = payload.get("ParsedResults") or []
+
+        if not parsed_results:
+            return None
+
+        lines_output = []
+        full_text_parts = []
+
+        for parsed in parsed_results:
+
+            parsed_text = parsed.get("ParsedText") or ""
+            if parsed_text.strip():
+                full_text_parts.append(parsed_text.strip())
+
+            overlay = parsed.get("TextOverlay") or {}
+            overlay_lines = overlay.get("Lines") or []
+
+            for line_obj in overlay_lines:
+
+                words_output = []
+                line_text_parts = []
+
+                min_x = float("inf")
+                min_y = float("inf")
+                max_x = 0
+                max_y = 0
+
+                for word in line_obj.get("Words", []):
+                    word_text = str(
+                        word.get("WordText", "")
+                    ).strip()
+
+                    if not word_text:
+                        continue
+
+                    left = float(word.get("Left", 0))
+                    top = float(word.get("Top", 0))
+                    width = float(word.get("Width", 0))
+                    height = float(word.get("Height", 0))
+
+                    line_text_parts.append(word_text)
+
+                    words_output.append({
+                        "text": word_text,
+                        "bbox": [
+                            left,
+                            top,
+                            width,
+                            height
+                        ]
+                    })
+
+                    min_x = min(min_x, left)
+                    min_y = min(min_y, top)
+                    max_x = max(max_x, left + width)
+                    max_y = max(max_y, top + height)
+
+                if not line_text_parts:
+                    continue
+
+                line_text = " ".join(line_text_parts)
+
+                lines_output.append({
+                    "text": line_text,
+                    "bbox": [
+                        min_x if min_x != float("inf") else 0,
+                        min_y if min_y != float("inf") else 0,
+                        max(0, max_x - min_x),
+                        max(0, max_y - min_y)
+                    ],
+                    "words": words_output
+                })
+
+        full_text = "\n".join(full_text_parts).strip()
+
+        # If ParsedText is empty but overlay exists,
+        # reconstruct the text from the overlay lines.
+        if not full_text and lines_output:
+            full_text = "\n".join(
+                line["text"] for line in lines_output
+            )
+
+        if not full_text:
+            return None
+
+        return {
+            "full_text": full_text,
+            "lines": lines_output,
+            "image_size": img.size
+        }
+
+    except Exception as e:
+        print(f"Cloud OCR warning: {e}")
+        return None
 def run_ocr(image_path: str) -> Dict[str, Any]:
+
+    # Vercel / cloud OCR
+    cloud_result = run_cloud_ocr(image_path)
+
+    if cloud_result and cloud_result.get("full_text", "").strip():
+        return cloud_result
     """
     Runs high-accuracy OCR on the image.
     Returns:
@@ -279,192 +461,298 @@ def parse_mrp_declaration(lines: List[Dict[str, Any]], full_text: str) -> Dict[s
 
 def parse_net_quantity(lines: List[Dict[str, Any]], full_text: str) -> Dict[str, Any]:
     """
-    Extracts Net Quantity, unit, and measures numeral font height.
-    Rule 6(1)(c) & Second Schedule: Valid units: g, kg, ml, l, m, cm, mm, N, U.
-    Prohibited units: gms, grm, gm, kilo, ltrs, cc.
+    Extract statutory Net Quantity. Prefer the value occurring after an
+    explicit "Net Quantity" label and ignore nutrition-table quantities
+    such as "Per 100 g" and "6.8 g".
     """
     result = {
-        "raw_text": None,
-        "value": None,
-        "unit": None,
-        "is_standard_unit": True,
-        "forbidden_unit_found": None,
-        "numeral_height_px": 0.0,
-        "estimated_height_mm": 0.0,
-        "bbox": None,
-        "confidence": 0.0
+        "raw_text": None, "value": None, "unit": None,
+        "is_standard_unit": True, "forbidden_unit_found": None,
+        "numeral_height_px": 0.0, "estimated_height_mm": 0.0,
+        "bbox": None, "confidence": 0.0
     }
-    
-    qty_regex = re.compile(
-        r"(?:NET\s*(?:QTY|QUANTITY|WT\.?|WEIGHT|VOL\.?|VOLUME|CONTENTS?)?|QUANTITY|WEIGHT)\s*[:\.\-]?\s*([0-9]+(?:\.[0-9]+)?)\s*([A-Za-z\.]+)",
-        re.IGNORECASE
+
+    qty_re = re.compile(
+        r"\b([0-9]+(?:\.[0-9]+)?)\s*"
+        r"(g|gms?|grm|gm|kg|kgs?|kilo|kilos|ml|l|ltr|ltrs|litres?|liter|"
+        r"m|cm|mm|N|U)\b", re.I
     )
-    
-    standalone_qty = re.compile(
-        r"\b([0-9]+(?:\.[0-9]+)?)\s*(gms?|grm|gm|g|kg|kgs?|kilo|kilos|ml|l|ltr|ltrs|litres?|liter|m|cm|mm|N|U)\b",
-        re.IGNORECASE
+    label_re = re.compile(
+        r"\bNET\s*(?:QTY|QUANTITY|WT\.?|WEIGHT|VOL\.?|VOLUME|CONTENTS?)\b",
+        re.I
     )
-    
-    forbidden_units = ["gms", "grm", "gm", "kilo", "kilos", "ltr", "ltrs", "litres", "liter", "cc", "cu.cm"]
-    standard_units = ["g", "kg", "ml", "l", "m", "cm", "mm", "N", "U"]
-    
-    matched_line = None
-    for line in lines:
-        text = line["text"]
-        match = qty_regex.search(text) or standalone_qty.search(text)
-        if match:
-            val_str = match.group(1)
-            unit_str = match.group(2).strip(".").lower()
-            
-            result["raw_text"] = match.group(0)
-            result["value"] = float(val_str)
-            result["unit"] = unit_str
-            result["bbox"] = line["bbox"]
-            matched_line = line
-            result["confidence"] = 0.92
-            
-            # Check unit standard
-            if unit_str in [u.lower() for u in forbidden_units]:
+    section_re = re.compile(
+        r"\b(?:MRP|MAX(?:IMUM)?\s*RETAIL|BATCH|LOT|MFD\.?|MFG\.?|"
+        r"USE\s+BY|EXP(?:IRY)?|BEST\s+BEFORE|CONSUMER|CUSTOMER|"
+        r"INGREDIENTS?|NUTRITION(?:AL)?|PER\s+100)\b", re.I
+    )
+    forbidden = {"gms", "grm", "gm", "kilo", "kilos", "ltr", "ltrs",
+                 "litres", "liter", "cc", "cu.cm"}
+
+    # Explicit label gets highest priority. Search forward several OCR lines
+    # because packaging layouts often put the value below the label.
+    for idx, line in enumerate(lines):
+        current = line.get("text", "").strip()
+        if not label_re.search(current):
+            continue
+
+        candidates = []
+        inline = current.split(":", 1)[-1].strip() if ":" in current else ""
+        if inline:
+            candidates.append((inline, line))
+
+        for j in range(idx + 1, min(idx + 10, len(lines))):
+            candidate = lines[j].get("text", "").strip()
+            if not candidate:
+                continue
+            if section_re.search(candidate):
+                continue
+            candidates.append((candidate, lines[j]))
+
+        for candidate, source_line in candidates:
+            q = qty_re.search(candidate)
+            if not q:
+                continue
+
+            unit = q.group(2).strip(".").lower()
+            result["raw_text"] = q.group(0)
+            result["value"] = float(q.group(1))
+            result["unit"] = unit
+            result["bbox"] = source_line.get("bbox") or line.get("bbox")
+            result["confidence"] = 0.97
+
+            if unit in forbidden:
                 result["is_standard_unit"] = False
-                result["forbidden_unit_found"] = unit_str
-            break
-            
-    # Calculate font height
-    if matched_line:
-        # Find the word containing the numbers to isolate numeral height
-        for w in matched_line.get("words", []):
-            if re.search(r"\d", w["text"]):
-                h_px = float(w["bbox"][3])
-                result["numeral_height_px"] = round(h_px, 1)
-                # Assuming 96 DPI baseline (1 inch = 25.4 mm; 96 px = 25.4 mm => 1 px = 0.264583 mm)
-                # For higher-res packaging photos, calculate relative to label height
-                mm = h_px * 0.265
-                result["estimated_height_mm"] = round(mm, 2)
-                break
-                
+                result["forbidden_unit_found"] = unit
+
+            # Use the actual numeric word's OCR height where available.
+            for word in source_line.get("words", []):
+                wt = str(word.get("text", ""))
+                if re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", wt):
+                    h_px = float(word.get("bbox", [0, 0, 0, 0])[3])
+                    result["numeral_height_px"] = round(h_px, 1)
+                    result["estimated_height_mm"] = round(h_px * 0.265, 2)
+                    break
+            return result
+
+    # Conservative fallback: only use a standalone quantity if it is NOT
+    # inside a nutrition section. This is intentionally lower confidence.
+    nutrition_re = re.compile(
+        r"\b(?:PER\s+100\s+G|ENERGY|PROTEIN|CARBOHYDRATE|SUGARS?|FAT|"
+        r"SODIUM|NUTRITION(?:AL)?|CALORIES?)\b", re.I
+    )
+    for idx, line in enumerate(lines):
+        current = line.get("text", "").strip()
+        if nutrition_re.search(current):
+            continue
+        q = qty_re.search(current)
+        if q:
+            unit = q.group(2).strip(".").lower()
+            result["raw_text"] = q.group(0)
+            result["value"] = float(q.group(1))
+            result["unit"] = unit
+            result["bbox"] = line.get("bbox")
+            result["confidence"] = 0.55
+            if unit in forbidden:
+                result["is_standard_unit"] = False
+                result["forbidden_unit_found"] = unit
+            return result
+
+    # Final fallback: OCR.space may return visual lines in a different
+    # reading order than ParsedText. In that case "Net Quantity:" can be
+    # separated from its value by MRP/Batch labels. Search only the text
+    # AFTER the explicit Net Quantity label, and reject nutrition phrases.
+    label_match = re.search(
+        r"\bNET\s*(?:QTY|QUANTITY|WT\.?|WEIGHT|VOL\.?|VOLUME|CONTENTS?)\b\s*:?\s*",
+        full_text, re.I
+    )
+    if label_match:
+        tail = full_text[label_match.end():]
+        # Keep the search bounded so unrelated declarations later in the
+        # package cannot become the net quantity.
+        tail = tail[:350]
+        tail_lines = [x.strip() for x in tail.splitlines() if x.strip()]
+        for candidate in tail_lines:
+            if section_re.search(candidate) and not re.search(
+                r"\b(?:\d+(?:\.\d+)?\s*(?:g|gms?|gm|grm|kg|kgs?|ml|l|ltr|litres?|liter))\b",
+                candidate, re.I
+            ):
+                # Labels such as MRP/Batch/Mfd are boundaries, but we keep
+                # scanning because the value can appear after several labels.
+                continue
+            q = qty_re.search(candidate)
+            if not q:
+                continue
+            unit = q.group(2).strip(".").lower()
+            result["raw_text"] = q.group(0)
+            result["value"] = float(q.group(1))
+            result["unit"] = unit
+            result["confidence"] = 0.88
+
+            # Recover the actual OCR bounding box from the visual line.
+            for source_line in lines:
+                if q.group(0).lower() in source_line.get("text", "").lower():
+                    result["bbox"] = source_line.get("bbox")
+                    for word in source_line.get("words", []):
+                        wt = str(word.get("text", "")).strip()
+                        if re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", wt):
+                            h_px = float(word.get("bbox", [0, 0, 0, 0])[3])
+                            result["numeral_height_px"] = round(h_px, 1)
+                            result["estimated_height_mm"] = round(h_px * 0.265, 2)
+                            break
+                    break
+
+            if unit in forbidden:
+                result["is_standard_unit"] = False
+                result["forbidden_unit_found"] = unit
+            return result
+
     return result
 
 def parse_manufacturer_details(lines: List[Dict[str, Any]], full_text: str) -> Dict[str, Any]:
     """
-    Extracts Manufacturer, Packer, or Importer name, address, and PIN code.
-    Rule 6(1)(a): Must bear name and complete address including PIN.
+    Extracts Manufacturer, Packer, or Importer name and address.
+    Handles common multi-line declarations such as:
+        Mfd. & Mkt. by:
+        Company Name
+        Address...
     """
     result = {
-        "raw_text": None,
-        "type": "Manufacturer", # Manufacturer / Packer / Importer
-        "company_name": None,
-        "address": None,
-        "pincode": None,
-        "has_pincode": False,
-        "bbox": None,
-        "confidence": 0.0
+        "raw_text": None, "type": "Manufacturer",
+        "company_name": None, "address": None, "pincode": None,
+        "has_pincode": False, "bbox": None, "confidence": 0.0
     }
-    
-    mfg_keywords = re.compile(
-        r"(?:MANUFACTURED|MFD\.?|MFG\.?|PACKED|PKD\.?|IMPORTED|IMP\.?|MARKETED|MKTD\.?)\s+(?:BY|AT)\s*[:\-]?\s*(.*)",
-        re.IGNORECASE
+
+    header_re = re.compile(
+        r"\b(?:MANUFACTURED|MFD\.?|MFG\.?|PACKED|PKD\.?|IMPORTED|IMP\.?|"
+        r"MARKETED|MKTD\.?)\b.*?\bBY\b\s*[:\-]?\s*(.*)$", re.I
     )
-    
-    pincode_regex = re.compile(r"\b([1-9][0-9]{5})\b")
-    
-    accumulated_lines = []
-    found_start = False
-    
+    pincode_re = re.compile(r"\b([1-9][0-9]{5})\b")
+    stop_re = re.compile(
+        r"^(?:LIC\.?|FSSAI|FOR\s+CONSUMER|CONSUMER|CUSTOMER|MRP|NET\s+QUANTITY|"
+        r"BATCH|USE\s+BY|BEST\s+BEFORE|MFD\.?\s*:?)\b", re.I
+    )
+
     for idx, line in enumerate(lines):
-        text = line["text"]
-        # Exclude date lines
-        if re.search(r"\b(?:month|year|date)\b", text, re.IGNORECASE):
+        text_line = line.get("text", "").strip()
+        # Explicitly support "Mfd. & Mkt. by:" and similar variants.
+        if not (header_re.search(text_line) or
+                re.search(r"\b(?:MFD\.?|MFG\.?)\s*(?:&|AND)\s*(?:MKT\.?|MARKETED)\s*BY\b", text_line, re.I)):
             continue
-        match = mfg_keywords.search(text)
-        if match:
-            found_start = True
-            keyword_content = match.group(1).strip()
-            
-            if "pack" in text.lower():
-                result["type"] = "Packer"
-            elif "import" in text.lower():
-                result["type"] = "Importer"
-                
-            accumulated_lines.append(text)
-            result["bbox"] = line["bbox"]
-            result["company_name"] = keyword_content if keyword_content else text
-            
-            # Read up to next 3 lines for multi-line address
-            for next_idx in range(idx + 1, min(idx + 4, len(lines))):
-                next_text = lines[next_idx]["text"]
-                # Stop if hitting another section
-                if re.search(r"MRP|Net Qty|Batch|Customer Care|Email", next_text, re.IGNORECASE):
-                    break
-                accumulated_lines.append(next_text)
-            break
-            
-    if accumulated_lines:
-        full_addr = " ".join(accumulated_lines)
-        result["raw_text"] = full_addr
-        result["address"] = full_addr
-        result["confidence"] = 0.88
-        
-        pin_match = pincode_regex.search(full_addr)
+
+        low = text_line.lower()
+        if "import" in low:
+            result["type"] = "Importer"
+        elif "pack" in low and "market" not in low:
+            result["type"] = "Packer"
+
+        collected = []
+        inline = header_re.search(text_line)
+        if inline and inline.group(1).strip():
+            collected.append(inline.group(1).strip())
+
+        # Consume following declaration lines until another section starts.
+        for j in range(idx + 1, min(idx + 7, len(lines))):
+            nxt = lines[j].get("text", "").strip()
+            if not nxt or stop_re.search(nxt):
+                break
+            collected.append(nxt)
+
+        if not collected:
+            continue
+
+        # The first collected line is normally the company name.
+        result["company_name"] = collected[0]
+        address_parts = collected[1:]
+        result["address"] = " ".join(address_parts).strip() or collected[0]
+        # OCR can append a stray token immediately after a complete postal
+        # address (e.g. "India. ssat"). Keep the declaration clean.
+        result["address"] = re.sub(r"(\bIndia\b)[\s.]+[A-Za-z]{2,10}$", r"\1.", result["address"], flags=re.I)
+        result["raw_text"] = f"{result['company_name']} {result['address']}".strip()
+        result["bbox"] = line.get("bbox")
+        result["confidence"] = 0.95
+
+        pin_match = pincode_re.search(result["raw_text"])
         if pin_match:
             result["pincode"] = pin_match.group(1)
             result["has_pincode"] = True
-            
-    # Check full text for pin if not caught in lines
-    if not result["has_pincode"]:
-        pin_match = pincode_regex.search(full_text)
-        if pin_match:
-            result["pincode"] = pin_match.group(1)
-            result["has_pincode"] = True
-            
+        return result
+
+    # PIN can still be surfaced, but never manufacture a company name from an address.
+    pin_match = pincode_re.search(full_text)
+    if pin_match:
+        result["pincode"] = pin_match.group(1)
+        result["has_pincode"] = True
     return result
 
 def parse_dates(lines: List[Dict[str, Any]], full_text: str) -> Dict[str, Any]:
     """
-    Extracts Month and Year of Manufacture / Packing and Expiry / Best Before.
-    Rule 6(1)(d): Month and year of manufacture or packing.
+    Extracts manufacturing/packing and expiry dates.
+    Handles labels and values appearing on separate OCR lines, e.g.:
+        Mfd.:
+        15/07/2024
     """
     result = {
-        "mfg_date": None,
-        "expiry_date": None,
-        "best_before": None,
-        "raw_text": None,
-        "bbox": None,
-        "confidence": 0.0
+        "mfg_date": None, "expiry_date": None, "best_before": None,
+        "raw_text": None, "bbox": None, "confidence": 0.0
     }
-    
-    mfg_regex = re.compile(
-        r"(?:MFD\.?|MFG\.?|DATE\s*OF\s*MFG|DATE\s*OF\s*PKG|PKD\.?|PACKED\s*ON)\s*[:\.\-]?\s*([0-9]{1,2}[/-][0-9]{2,4}|[A-Za-z]{3,9}\s*[0-9]{2,4})",
-        re.IGNORECASE
+
+    date_value_re = re.compile(
+        r"\b(?:0?[1-9]|[12]\d|3[01])[/\-](?:0?[1-9]|1[0-2])[/\-](?:20)?\d{2}\b"
+        r"|\b(?:0?[1-9]|1[0-2])[/\-](?:20)?\d{2}\b"
+        r"|\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|"
+        r"Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|"
+        r"Dec(?:ember)?)\s*(?:20)?\d{2}\b", re.I
     )
-    
-    exp_regex = re.compile(
-        r"(?:EXP\.?|EXPIRY|USE\s*BY|BEST\s*BEFORE)\s*[:\.\-]?\s*([0-9]{1,2}[/-][0-9]{2,4}|[A-Za-z]{3,9}\s*[0-9]{2,4}|\d+\s*MONTHS?)",
-        re.IGNORECASE
+    mfg_label_re = re.compile(
+        r"\b(?:MFD\.?|MFG\.?|DATE\s+OF\s+MFG|DATE\s+OF\s+PKG|DATE\s+OF\s+PACKING|"
+        r"PKD\.?|PACKED\s+ON|MONTH\s*(?:&|AND)\s*YEAR\s+OF\s+MFG|MONTH\s+OF\s+PKD)\b", re.I
     )
-    
-    generic_date = re.compile(r"\b([0-1]?[0-9][/-]20[2-3][0-9]|[A-Za-z]{3,9}\s*20[2-3][0-9])\b")
-    
-    for line in lines:
-        text = line["text"]
-        m_match = mfg_regex.search(text)
-        if m_match and not result["mfg_date"]:
-            result["mfg_date"] = m_match.group(1)
-            result["raw_text"] = text
-            result["bbox"] = line["bbox"]
-            result["confidence"] = 0.90
-            
-        e_match = exp_regex.search(text)
-        if e_match and not result["expiry_date"]:
-            result["expiry_date"] = e_match.group(1)
-            if not result["bbox"]:
-                result["bbox"] = line["bbox"]
-                
+    exp_label_re = re.compile(r"\b(?:EXP\.?|EXPIRY|USE\s+BY|BEST\s+BEFORE)\b", re.I)
+
+    for idx, line in enumerate(lines):
+        current = line.get("text", "").strip()
+
+        if mfg_label_re.search(current) and not result["mfg_date"]:
+            # First try value on same line, then immediately following OCR line.
+            candidates = [current]
+            if idx + 1 < len(lines):
+                candidates.append(lines[idx + 1].get("text", "").strip())
+            for candidate in candidates:
+                d = date_value_re.search(candidate)
+                if d:
+                    result["mfg_date"] = d.group(0)
+                    result["raw_text"] = f"{current} {candidate}".strip()
+                    result["bbox"] = line.get("bbox")
+                    result["confidence"] = 0.97
+                    break
+
+        if exp_label_re.search(current) and not result["expiry_date"]:
+            candidates = [current]
+            if idx + 1 < len(lines):
+                candidates.append(lines[idx + 1].get("text", "").strip())
+            for candidate in candidates:
+                d = date_value_re.search(candidate)
+                if d:
+                    result["expiry_date"] = d.group(0)
+                    if not result["bbox"]:
+                        result["bbox"] = line.get("bbox")
+                    break
+
+    # Conservative fallback only if no explicit MFG label was found.
     if not result["mfg_date"]:
-        g_match = generic_date.search(full_text)
-        if g_match:
-            result["mfg_date"] = g_match.group(1)
-            result["confidence"] = 0.75
-            
+        for line in lines:
+            current = line.get("text", "").strip()
+            if re.search(r"\bPER\s+\d", current, re.I):
+                continue
+            d = date_value_re.search(current)
+            if d:
+                result["mfg_date"] = d.group(0)
+                result["raw_text"] = current
+                result["bbox"] = line.get("bbox")
+                result["confidence"] = 0.65
+                break
+
     return result
 
 def parse_consumer_care(lines: List[Dict[str, Any]], full_text: str) -> Dict[str, Any]:
@@ -500,9 +788,26 @@ def parse_consumer_care(lines: List[Dict[str, Any]], full_text: str) -> Dict[str
                 result["bbox"] = line["bbox"]
                 
     # Search phone and email in all lines
-    p_match = phone_regex.search(full_text)
-    if p_match:
-        result["phone"] = p_match.group(0).strip()
+    # Prefer the consumer helpline/toll-free number over licence numbers
+    # (e.g. FSSAI licence IDs can look like long phone numbers to OCR).
+    phone_candidates = re.findall(
+        r"1800[-\s]?\d{3}[-\s]?\d{4}|\+?91[-\s]?[6-9]\d{9}|"
+        r"0\d{2,4}[-\s]?\d{6,8}|\b\d{10}\b",
+        full_text
+    )
+    if phone_candidates:
+        preferred = next(
+            (p for p in phone_candidates if re.search(r"1800", p)),
+            next((p for p in phone_candidates if re.fullmatch(r"\d{10}", re.sub(r"\D", "", p))), phone_candidates[0])
+        )
+        digits = re.sub(r"\D", "", preferred)
+        # Prefer the statutory toll-free number when OCR has also interpreted
+        # the FSSAI licence number as a phone-like string.
+        if "1800" in digits:
+            m = re.search(r"1800\d{7}", digits)
+            result["phone"] = m.group(0) if m else preferred.strip()
+        else:
+            result["phone"] = preferred.strip()
         result["has_phone"] = True
         
     e_match = email_regex.search(full_text)
@@ -567,30 +872,64 @@ def parse_country_of_origin(lines: List[Dict[str, Any]], full_text: str) -> Dict
 
 def parse_batch_number(lines: List[Dict[str, Any]], full_text: str) -> Dict[str, Any]:
     """
-    Rule 6(1)(f): Batch number, lot number, or code number.
+    Extract a batch/lot/code value only when it is explicitly associated with
+    the corresponding label. Handles labels and values separated by several
+    OCR lines, while rejecting nearby labels such as "Mfd.".
     """
     result = {
-        "batch_number": None,
-        "raw_text": None,
-        "bbox": None,
-        "confidence": 0.0
+        "batch_number": None, "raw_text": None,
+        "bbox": None, "confidence": 0.0
     }
-    
-    batch_regex = re.compile(
-        r"(?:BATCH\s*(?:NO\.?|NUM\.?)?|LOT\s*(?:NO\.?)?|B\.NO\.?)\s*[:\-]?\s*([A-Z0-9\-_/]+)",
-        re.IGNORECASE
+
+    label_re = re.compile(
+        r"\b(?:BATCH\s*(?:NO\.?|NUM(?:BER)?\.?)?|LOT\s*(?:NO\.?|NUM(?:BER)?\.?)?|"
+        r"B\.?\s*NO\.?|CODE\s*(?:NO\.?|NUMBER)?)\b", re.I
     )
-    
-    for line in lines:
-        text = line["text"]
-        match = batch_regex.search(text)
-        if match:
-            result["batch_number"] = match.group(1)
-            result["raw_text"] = text
-            result["bbox"] = line["bbox"]
-            result["confidence"] = 0.90
-            break
-            
+    value_re = re.compile(r"\b[A-Z0-9][A-Z0-9\-_/]{2,30}\b", re.I)
+    reject_values = {
+        "mfd", "mfg", "use", "by", "no", "number", "batch", "lot",
+        "mrp", "india", "lic"
+    }
+    stop_re = re.compile(
+        r"\b(?:MFD\.?|MFG\.?|USE\s+BY|EXP(?:IRY)?|BEST\s+BEFORE|"
+        r"MRP|NET\s+QUANTITY|CONSUMER|CUSTOMER|INGREDIENTS?|"
+        r"NUTRITION(?:AL)?|LIC\.?|FSSAI)\b", re.I
+    )
+
+    for idx, line in enumerate(lines):
+        current = line.get("text", "").strip()
+        if not label_re.search(current):
+            continue
+
+        # Check same line first, but reject label words.
+        candidates = [(current, line)]
+        for j in range(idx + 1, min(idx + 8, len(lines))):
+            candidate = lines[j].get("text", "").strip()
+            if not candidate:
+                continue
+            # Do not stop merely on "Mfd." because the actual batch value
+            # can appear before/after adjacent date labels in OCR order.
+            candidates.append((candidate, lines[j]))
+
+        for candidate, source_line in candidates:
+            for match in value_re.finditer(candidate):
+                value = match.group(0).strip(".,:;")
+                if value.lower() in reject_values:
+                    continue
+                # Ignore ordinary date-like values.
+                if re.fullmatch(r"\d{1,2}[/-]\d{1,2}[/-]\d{2,4}", value):
+                    continue
+                # A batch code normally has letters/digits; require either a
+                # letter or a multi-character numeric code.
+                if not re.search(r"[A-Za-z]", value) and len(value) < 4:
+                    continue
+
+                result["batch_number"] = value
+                result["raw_text"] = f"{current} {candidate}".strip()
+                result["bbox"] = source_line.get("bbox") or line.get("bbox")
+                result["confidence"] = 0.97
+                return result
+
     return result
 
 def extract_all_declarations(ocr_data: Dict[str, Any]) -> Dict[str, Any]:
