@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LexMetrix — Legal Metrology Automated Compliance System</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col antialiased">
+
+  <!-- Top Government Branding Header -->
+  <header class="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white border-b-2 border-amber-500 shadow-md sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <!-- Logo & Title -->
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-slate-950 font-black text-xl shadow-inner">
+            <i data-lucide="scale" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="text-xl font-bold tracking-tight text-white font-mono">LexMetrix</span>
+              <span class="text-xs bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full font-semibold">DoCA • LMR 2011</span>
+            </div>
+            <p class="text-[11px] text-slate-300 tracking-wide">
+              Automated Legal Metrology Compliance Checking System & Enforcement Portal
+            </p>
+          </div>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <nav class="hidden md:flex items-center space-x-1">
+          <button onclick="switchTab('scanner')" id="tab-btn-scanner" class="tab-btn active-tab flex items-center space-x-2 px-3.5 py-2 rounded-lg text-sm font-medium transition">
+            <i data-lucide="scan" class="w-4 h-4"></i>
+            <span>Inspection Scanner</span>
+          </button>
+          <button onclick="switchTab('dashboard')" id="tab-btn-dashboard" class="tab-btn text-slate-300 hover:text-white flex items-center space-x-2 px-3.5 py-2 rounded-lg text-sm font-medium transition">
+            <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+            <span>Command Center</span>
+          </button>
+          <button onclick="switchTab('repository')" id="tab-btn-repository" class="tab-btn text-slate-300 hover:text-white flex items-center space-x-2 px-3.5 py-2 rounded-lg text-sm font-medium transition">
+            <i data-lucide="folder-archive" class="w-4 h-4"></i>
+            <span>Inspection Repository</span>
+          </button>
+          <button onclick="switchTab('rules')" id="tab-btn-rules" class="tab-btn text-slate-300 hover:text-white flex items-center space-x-2 px-3.5 py-2 rounded-lg text-sm font-medium transition">
+            <i data-lucide="book-open-check" class="w-4 h-4"></i>
+            <span>Rules Config</span>
+          </button>
+        </nav>
+
+        <!-- Officer Profile & Mobile Toggle -->
+        <div class="flex items-center space-x-3">
+          <button onclick="toggleMobileViewport()" id="mobile-toggle-btn" class="hidden sm:flex items-center space-x-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs px-3 py-1.5 rounded-md transition" title="Simulate Smartphone Field Inspector Display">
+            <i data-lucide="smartphone" class="w-4 h-4 text-amber-400"></i>
+            <span id="mobile-toggle-text">Mobile View</span>
+          </button>
+          <div class="flex items-center space-x-2 pl-2 border-l border-slate-700">
+            <div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold text-white uppercase">
+              RS
+            </div>
+            <div class="hidden lg:block text-left text-xs">
+              <p class="font-semibold text-white leading-tight">Insp. Rajesh Sharma</p>
+              <p class="text-[10px] text-slate-400">DOCA-DL-402 • Delhi</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8" id="app-container">
+
+    <!-- ================= TAB 1: INSPECTION SCANNER ================= -->
+    <div id="tab-content-scanner" class="tab-page space-y-6">
+      
+      <!-- Top Pitch Banner -->
+      <div class="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 rounded-2xl p-5 text-white shadow-lg relative overflow-hidden">
+        <div class="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div class="inline-flex items-center space-x-2 bg-amber-500/20 text-amber-300 px-3 py-1 rounded-full text-xs font-semibold mb-2 border border-amber-500/30">
+              <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+              <span>Department of Consumer Affairs (DoCA) Problem Statement #26034</span>
+            </div>
+            <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight">Legal Metrology Automated Label Inspector</h1>
+            <p class="text-sm text-slate-300 max-w-2xl mt-1">
+              <strong>Scan once. Analyse automatically. Validate accurately. Report digitally.</strong> Preprocesses packaging images, runs high-speed OCR, validates statutory declarations under LMR 2011, and generates legally auditable notices.
+            </p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button onclick="seedDemoData()" class="inline-flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-2 rounded-xl text-xs font-semibold shadow transition">
+              <i data-lucide="database" class="w-4 h-4"></i>
+              <span>Seed Enforcement Data</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick 1-Click Evaluation Presets (Great for pitch & demo!) -->
+      <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center space-x-2">
+            <i data-lucide="sparkles" class="w-4 h-4 text-amber-500"></i>
+            <h2 class="text-xs font-bold uppercase tracking-wider text-slate-600">Quick Test Packaging Samples (1-Click Pitch Demonstration)</h2>
+          </div>
+          <span class="text-[11px] text-slate-400">Click any scenario to evaluate instantly</span>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3" id="sample-cards-grid">
+          <!-- Loaded dynamically -->
+        </div>
+      </div>
+
+      <!-- Ingestion & Camera Input Grid -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Left: Upload & Camera Controls (5 Cols) -->
+        <div class="lg:col-span-5 space-y-4">
+          <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 class="font-bold text-slate-900 text-sm flex items-center space-x-2">
+                <i data-lucide="camera" class="w-4 h-4 text-blue-600"></i>
+                <span>Image Ingestion & Capture</span>
+              </h3>
+              <div class="flex bg-slate-100 rounded-lg p-0.5 text-xs">
+                <button onclick="setCaptureMode('upload')" id="mode-upload-btn" class="px-2.5 py-1 rounded-md font-medium bg-white text-slate-900 shadow-xs">Upload</button>
+                <button onclick="setCaptureMode('camera')" id="mode-camera-btn" class="px-2.5 py-1 rounded-md font-medium text-slate-600 hover:text-slate-900">Live Camera</button>
+              </div>
+            </div>
+
+            <!-- Upload Area -->
+            <div id="upload-panel" class="space-y-3">
+              <div id="drop-zone" class="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-xl p-6 text-center cursor-pointer transition bg-slate-50/50 flex flex-col items-center justify-center min-h-[220px]">
+                <input type="file" id="file-input" accept="image/*" class="hidden" capture="environment" onchange="handleFileSelected(event)" />
+                <div class="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mb-3">
+                  <i data-lucide="upload-cloud" class="w-6 h-6"></i>
+                </div>
+                <p class="text-sm font-semibold text-slate-800">Tap to Capture with Camera or Upload Image</p>
+                <p class="text-xs text-slate-500 mt-1">Supports packaging labels, carton panels, retail photos (PNG, JPG, WEBP)</p>
+                <button type="button" onclick="document.getElementById('file-input').click()" class="mt-4 inline-flex items-center space-x-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow-sm">
+                  <i data-lucide="folder" class="w-3.5 h-3.5"></i>
+                  <span>Browse Photos</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Live Camera Feed (Hidden by default) -->
+            <div id="camera-panel" class="hidden space-y-3">
+              <div class="relative rounded-xl overflow-hidden bg-black aspect-video flex items-center justify-center border border-slate-800">
+                <video id="camera-feed" autoplay playsinline class="w-full h-full object-cover"></video>
+                <!-- Reticle Guides overlay -->
+                <div class="absolute inset-4 border-2 border-dashed border-white/60 pointer-events-none rounded-lg flex items-center justify-center">
+                  <span class="text-[11px] bg-black/60 text-white px-2 py-1 rounded">Align Packaging Declaration Label Here</span>
+                </div>
+              </div>
+              <div class="flex space-x-2">
+                <button onclick="captureFromCamera()" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-2 rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 shadow">
+                  <i data-lucide="circle-dot" class="w-4 h-4"></i>
+                  <span>Capture Label Photo</span>
+                </button>
+                <button onclick="stopCamera()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-2 rounded-xl text-xs font-medium">
+                  Cancel
+                </button>
+              </div>
+            </div>
+
+            <!-- Preview Thumbnail -->
+            <div id="selected-preview-card" class="hidden border border-slate-200 rounded-xl p-3 bg-slate-50 flex items-center space-x-3">
+              <img id="selected-preview-img" class="w-16 h-16 object-cover rounded-lg border border-slate-200" src="" alt="Selected package" />
+              <div class="flex-1 min-w-0">
+                <p id="selected-preview-name" class="text-xs font-bold text-slate-800 truncate">Package Image Ready</p>
+                <p id="selected-preview-size" class="text-[11px] text-slate-500">Ready for statutory analysis</p>
+              </div>
+              <button onclick="clearSelectedImage()" class="text-slate-400 hover:text-red-500 p-1">
+                <i data-lucide="x" class="w-4 h-4"></i>
+              </button>
+            </div>
+
+            <!-- Inspection Metadata Fields -->
+            <div class="space-y-2.5 pt-2 border-t border-slate-100 text-xs">
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="block text-slate-600 font-medium mb-1">Product Name</label>
+                  <input type="text" id="meta-product-name" value="Packaged Commodity" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 focus:ring-1 focus:ring-blue-500 outline-none" />
+                </div>
+                <div>
+                  <label class="block text-slate-600 font-medium mb-1">Brand / Trademark</label>
+                  <input type="text" id="meta-brand" value="Commercial Brand" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 focus:ring-1 focus:ring-blue-500 outline-none" />
+                </div>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="block text-slate-600 font-medium mb-1">Commodity Category</label>
+                  <select id="meta-category" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 focus:ring-1 focus:ring-blue-500 outline-none">
+                    <option value="General FMCG / Food">General FMCG / Food</option>
+                    <option value="Biscuits & Confectionery">Biscuits & Confectionery</option>
+                    <option value="Snacks & Savouries">Snacks & Savouries</option>
+                    <option value="Household & Detergents">Household & Detergents</option>
+                    <option value="Edible Oils">Edible Oils</option>
+                    <option value="Cosmetics & Personal Care">Cosmetics & Personal Care</option>
+                    <option value="Imported Commodities">Imported Commodities</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-slate-600 font-medium mb-1">Inspection Location</label>
+                  <input type="text" id="meta-location" value="Supermarket Outlet, New Delhi" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 focus:ring-1 focus:ring-blue-500 outline-none" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Start Scan Button -->
+            <button id="run-scan-btn" onclick="executeScan()" class="w-full bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-600 hover:to-indigo-600 text-white font-bold py-3 px-4 rounded-xl shadow-md transition flex items-center justify-center space-x-2">
+              <i data-lucide="scan-line" class="w-5 h-5"></i>
+              <span class="text-sm">Scan & Validate Legal Metrology Rules</span>
+            </button>
+
+            <!-- Pipeline Status Indicator -->
+            <div id="pipeline-status" class="hidden rounded-xl border border-blue-200 bg-blue-50/70 p-3 text-xs space-y-2">
+              <div class="flex items-center justify-between font-semibold text-blue-900">
+                <span class="flex items-center space-x-1.5">
+                  <i data-lucide="loader-2" class="w-4 h-4 animate-spin text-blue-600"></i>
+                  <span id="pipeline-status-text">Analysing packaging...</span>
+                </span>
+                <span id="pipeline-step-badge" class="bg-blue-200 text-blue-800 text-[10px] px-2 py-0.5 rounded-full">Step 2/4</span>
+              </div>
+              <div class="w-full bg-blue-200 h-1.5 rounded-full overflow-hidden">
+                <div id="pipeline-progress-bar" class="bg-blue-600 h-full w-1/3 transition-all duration-300"></div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Right: Evidence Viewer & Statutory Verdict (7 Cols) -->
+        <div class="lg:col-span-7 space-y-4">
+          
+          <!-- Empty State (When no scan yet) -->
+          <div id="results-empty-state" class="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-sm flex flex-col items-center justify-center min-h-[480px]">
+            <div class="w-16 h-16 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mb-4">
+              <i data-lucide="file-check-2" class="w-8 h-8"></i>
+            </div>
+            <h4 class="text-base font-bold text-slate-700">No Product Scanned Yet</h4>
+            <p class="text-xs text-slate-400 max-w-sm mt-1">
+              Select one of the demo sample packages above, or upload a product packaging image to run computer vision and statutory rule validation.
+            </p>
+          </div>
+
+          <!-- Active Results Container (Shown when scan complete) -->
+          <div id="results-active-container" class="hidden space-y-4">
+            
+            <!-- Verdict Banner Card -->
+            <div id="verdict-banner-card" class="rounded-2xl p-5 border shadow-sm transition">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div class="flex items-center space-x-3">
+                  <div id="verdict-icon-container" class="w-12 h-12 rounded-xl flex items-center justify-center text-white">
+                    <i id="verdict-icon" data-lucide="shield-check" class="w-6 h-6"></i>
+                  </div>
+                  <div>
+                    <div class="flex items-center space-x-2">
+                      <h3 id="verdict-status-title" class="text-xl font-black tracking-tight">COMPLIANT</h3>
+                      <span id="verdict-score-badge" class="px-2.5 py-0.5 rounded-full text-xs font-extrabold font-mono">100%</span>
+                    </div>
+                    <p id="verdict-subtitle" class="text-xs mt-0.5 font-medium">All mandatory declarations meet Legal Metrology (PC) Rules, 2011</p>
+                  </div>
+                </div>
+
+                <!-- Action Controls -->
+                <div class="flex items-center space-x-2">
+                  <a id="download-pdf-btn" href="#" target="_blank" class="inline-flex items-center space-x-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-3.5 py-2 rounded-xl shadow transition">
+                    <i data-lucide="download" class="w-4 h-4"></i>
+                    <span>Official PDF Report</span>
+                  </a>
+                  <button onclick="shareOrCopySummary()" class="p-2 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs transition" title="Copy Summary">
+                    <i data-lucide="copy" class="w-4 h-4"></i>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Statutory Order Notice Callout -->
+              <div id="legal-order-box" class="mt-4 pt-3 border-t text-xs">
+                <p class="font-semibold" id="legal-order-title">Official Action Recommended:</p>
+                <p class="mt-0.5 text-[11px]" id="legal-order-text">Clearance granted.</p>
+              </div>
+            </div>
+
+            <!-- Photographic Evidence with Bounding Boxes -->
+            <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-3">
+              <div class="flex items-center justify-between">
+                <h4 class="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center space-x-1.5">
+                  <i data-lucide="image" class="w-4 h-4 text-blue-600"></i>
+                  <span>Photographic Evidence & Bounding Boxes</span>
+                </h4>
+                <div class="flex items-center space-x-3 text-[11px]">
+                  <span class="flex items-center space-x-1 text-emerald-700 font-medium">
+                    <span class="w-2.5 h-2.5 rounded-sm bg-emerald-600 inline-block"></span>
+                    <span>Compliant</span>
+                  </span>
+                  <span class="flex items-center space-x-1 text-red-700 font-medium">
+                    <span class="w-2.5 h-2.5 rounded-sm bg-red-600 inline-block"></span>
+                    <span>Violation</span>
+                  </span>
+                  <span class="flex items-center space-x-1 text-amber-700 font-medium">
+                    <span class="w-2.5 h-2.5 rounded-sm bg-amber-500 inline-block"></span>
+                    <span>Defect</span>
+                  </span>
+                </div>
+              </div>
+
+              <!-- Image Canvas / Viewport -->
+              <div class="rounded-xl border border-slate-200 overflow-hidden bg-slate-900 max-h-[380px] flex items-center justify-center">
+                <img id="evidence-display-img" class="w-full h-auto max-h-[380px] object-contain" src="" alt="Annotated Evidence" />
+              </div>
+
+              <!-- Evidentiary & Quality Metrics Bar -->
+              <div class="grid grid-cols-3 gap-2 text-center text-xs pt-1">
+                <div class="bg-slate-50 border border-slate-100 p-2 rounded-lg">
+                  <p class="text-[10px] text-slate-400 font-medium">Image Sharpness (Laplacian)</p>
+                  <p id="metric-blur-score" class="font-bold text-slate-800">182.4 (Sharp)</p>
+                </div>
+                <div class="bg-slate-50 border border-slate-100 p-2 rounded-lg">
+                  <p class="text-[10px] text-slate-400 font-medium">Principal Display Area</p>
+                  <p id="metric-pdp-area" class="font-bold text-slate-800">~245 cm²</p>
+                </div>
+                <div class="bg-slate-50 border border-slate-100 p-2 rounded-lg">
+                  <p class="text-[10px] text-slate-400 font-medium">Measured Numeral Height</p>
+                  <p id="metric-font-height" class="font-bold text-slate-800">4.2 mm (Valid)</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Granular Statutory Checklist Breakdown -->
+            <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
+              <h4 class="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center space-x-1.5">
+                <i data-lucide="check-square" class="w-4 h-4 text-indigo-600"></i>
+                <span>Statutory Declarations Verification Checklist</span>
+              </h4>
+
+              <div class="divide-y divide-slate-100" id="statutory-checklist-container">
+                <!-- Injected via JavaScript -->
+              </div>
+            </div>
+
+            <!-- Detected Violations Table (If any) -->
+            <div id="violations-section" class="hidden bg-red-50/50 border border-red-200 rounded-2xl p-5 shadow-sm space-y-3">
+              <div class="flex items-center space-x-2 text-red-800 font-bold text-sm">
+                <i data-lucide="alert-octagon" class="w-5 h-5 text-red-600"></i>
+                <span>Detected Violations & Penalties under Legal Metrology Act, 2009</span>
+              </div>
+              <div class="space-y-2.5" id="violations-list-container">
+                <!-- Injected via JavaScript -->
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- ================= TAB 2: ENFORCEMENT DASHBOARD ================= -->
+    <div id="tab-content-dashboard" class="tab-page hidden space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-4">
+        <div>
+          <h2 class="text-2xl font-extrabold text-slate-900 tracking-tight">Central Enforcement Command Center</h2>
+          <p class="text-xs text-slate-500">Real-time Legal Metrology compliance surveillance across retail, supermarkets & e-commerce hubs</p>
+        </div>
+        <div class="flex items-center space-x-2">
+          <button onclick="refreshDashboard()" class="inline-flex items-center space-x-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-medium shadow-xs">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+            <span>Refresh Analytics</span>
+          </button>
+          <a href="/api/inspections/export/csv" class="inline-flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold shadow">
+            <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5"></i>
+            <span>Export CSV</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- KPI Metrics Cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+          <div>
+            <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Products Scanned</p>
+            <p id="kpi-total" class="text-3xl font-black text-slate-900 mt-1 font-mono">0</p>
+            <p class="text-[11px] text-blue-600 font-medium mt-1">Across 14 retail districts</p>
+          </div>
+          <div class="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+            <i data-lucide="layers" class="w-6 h-6"></i>
+          </div>
+        </div>
+
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+          <div>
+            <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Overall Compliance Rate</p>
+            <p id="kpi-compliance-rate" class="text-3xl font-black text-emerald-600 mt-1 font-mono">0.0%</p>
+            <p class="text-[11px] text-slate-500 font-medium mt-1">Target threshold: ≥ 85%</p>
+          </div>
+          <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <i data-lucide="check-circle-2" class="w-6 h-6"></i>
+          </div>
+        </div>
+
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+          <div>
+            <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Violations Flagged</p>
+            <p id="kpi-violations" class="text-3xl font-black text-red-600 mt-1 font-mono">0</p>
+            <p class="text-[11px] text-red-500 font-medium mt-1">Actionable under Section 36</p>
+          </div>
+          <div class="w-12 h-12 rounded-xl bg-red-50 text-red-600 flex items-center justify-center">
+            <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+          </div>
+        </div>
+
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+          <div>
+            <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Notices / Under Review</p>
+            <p id="kpi-reviews" class="text-3xl font-black text-amber-600 mt-1 font-mono">0</p>
+            <p class="text-[11px] text-amber-600 font-medium mt-1">Form VII advisory issued</p>
+          </div>
+          <div class="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+            <i data-lucide="file-warning" class="w-6 h-6"></i>
+          </div>
+        </div>
+      </div>
+
+      <!-- Charts Section -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Top Violated Legal Metrology Rules (7 Cols) -->
+        <div class="lg:col-span-7 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="font-bold text-slate-800 text-sm">Most Frequently Violated Statutory Rules</h3>
+            <span class="text-[11px] text-slate-400">Rule-wise breakdown</span>
+          </div>
+          <div class="h-64">
+            <canvas id="violationsRuleChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Compliance by Commodity Category (5 Cols) -->
+        <div class="lg:col-span-5 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="font-bold text-slate-800 text-sm">Inspected Commodity Categories</h3>
+            <span class="text-[11px] text-slate-400">Category share</span>
+          </div>
+          <div class="h-64 flex items-center justify-center">
+            <canvas id="categoryPieChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Inspections Feed -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">
+        <h3 class="font-bold text-slate-800 text-sm">Recent Field Inspection Timeline</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left">
+            <thead class="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
+              <tr>
+                <th class="py-2.5 px-3">Reference Code</th>
+                <th class="py-2.5 px-3">Date & Time</th>
+                <th class="py-2.5 px-3">Product Name</th>
+                <th class="py-2.5 px-3">Category</th>
+                <th class="py-2.5 px-3">Inspector</th>
+                <th class="py-2.5 px-3">Compliance</th>
+                <th class="py-2.5 px-3 text-right">Report</th>
+              </tr>
+            </thead>
+            <tbody id="dashboard-recent-table-body" class="divide-y divide-slate-100">
+              <!-- Injected via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ================= TAB 3: REPOSITORY & HISTORY ================= -->
+    <div id="tab-content-repository" class="tab-page hidden space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h2 class="text-2xl font-extrabold text-slate-900 tracking-tight">Auditable Inspection Repository</h2>
+          <p class="text-xs text-slate-500">Search, filter, and review evidentiary records of all scanned commodities</p>
+        </div>
+        <div class="flex items-center space-x-2">
+          <a href="/api/inspections/export/csv" class="inline-flex items-center space-x-1.5 bg-slate-900 hover:bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs font-semibold shadow">
+            <i data-lucide="download" class="w-3.5 h-3.5"></i>
+            <span>Export CSV</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- Search & Filters Bar -->
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+        <div class="sm:col-span-2 relative">
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+          <input type="text" id="repo-search-input" placeholder="Search by Product, Brand, or Inspection Code..." oninput="loadRepositoryData()" class="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-3 py-2 outline-none focus:ring-1 focus:ring-blue-500" />
+        </div>
+        <div>
+          <select id="repo-status-filter" onchange="loadRepositoryData()" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-blue-500">
+            <option value="ALL">All Compliance Statuses</option>
+            <option value="COMPLIANT">Compliant Only</option>
+            <option value="NON_COMPLIANT">Non-Compliant Only</option>
+            <option value="REVIEW_RECOMMENDED">Review Recommended Only</option>
+          </select>
+        </div>
+        <div>
+          <select id="repo-category-filter" onchange="loadRepositoryData()" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-blue-500">
+            <option value="ALL">All Categories</option>
+            <option value="Biscuits & Confectionery">Biscuits & Confectionery</option>
+            <option value="Snacks & Savouries">Snacks & Savouries</option>
+            <option value="Household & Detergents">Household & Detergents</option>
+            <option value="Edible Oils">Edible Oils</option>
+            <option value="Imported Commodities">Imported Commodities</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Records Table -->
+      <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left">
+            <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+              <tr>
+                <th class="py-3 px-4">Inspection Ref</th>
+                <th class="py-3 px-4">Timestamp</th>
+                <th class="py-3 px-4">Product & Brand</th>
+                <th class="py-3 px-4">Category</th>
+                <th class="py-3 px-4">Location</th>
+                <th class="py-3 px-4">Score</th>
+                <th class="py-3 px-4">Verdict</th>
+                <th class="py-3 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="repository-table-body" class="divide-y divide-slate-100">
+              <!-- Injected dynamically -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ================= TAB 4: RULE ENGINE CONFIG ================= -->
+    <div id="tab-content-rules" class="tab-page hidden space-y-4">
+      <div class="border-b border-slate-200 pb-3">
+        <div class="inline-flex items-center space-x-1.5 bg-blue-100 text-blue-800 text-[11px] font-semibold px-2.5 py-0.5 rounded-full mb-1">
+          <i data-lucide="shield-check" class="w-3.5 h-3.5"></i>
+          <span>Version-Controlled Rule Database</span>
+        </div>
+        <h2 class="text-2xl font-extrabold text-slate-900 tracking-tight">Legal Metrology Statutory Rules & Thresholds</h2>
+        <p class="text-xs text-slate-500">
+          Enables Department of Consumer Affairs (DoCA) to update compliance rules, font size thresholds, and penalty sections dynamically without modifying code.
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="rules-cards-container">
+        <!-- Injected dynamically -->
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Evidence Details Modal -->
+  <div id="evidence-modal" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between border-b pb-3">
+        <div>
+          <h3 class="font-bold text-slate-900 text-base" id="modal-title">Inspection Record Evidence</h3>
+          <p class="text-xs text-slate-500 font-mono" id="modal-code">LM-2026-XXXX</p>
+        </div>
+        <button onclick="closeEvidenceModal()" class="text-slate-400 hover:text-slate-700 p-1.5">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <h4 class="text-xs font-bold text-slate-700 mb-2">Photographic Evidence</h4>
+          <div class="rounded-xl border border-slate-200 overflow-hidden bg-slate-900">
+            <img id="modal-img" src="" alt="Evidence" class="w-full h-auto object-contain max-h-[300px]" />
+          </div>
+        </div>
+        <div class="space-y-3 text-xs">
+          <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
+            <p class="text-[10px] uppercase font-bold text-slate-400">Statutory Verdict</p>
+            <p id="modal-status" class="text-sm font-black mt-0.5">COMPLIANT</p>
+            <p id="modal-score" class="text-xs text-slate-500 font-semibold">Compliance Score: 100%</p>
+          </div>
+          <div>
+            <p class="font-bold text-slate-700 mb-1">Extracted Declarations Summary</p>
+            <div id="modal-declarations" class="bg-slate-50 p-3 rounded-xl border border-slate-100 font-mono text-[11px] space-y-1">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pt-3 border-t flex justify-end space-x-2">
+        <a id="modal-pdf-link" href="#" target="_blank" class="inline-flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-4 py-2 rounded-xl shadow">
+          <i data-lucide="download" class="w-4 h-4"></i>
+          <span>Download Official PDF Report</span>
+        </a>
+        <button onclick="closeEvidenceModal()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-4 py-2 rounded-xl">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="bg-white border-t border-slate-200 py-4 mt-8 text-center text-xs text-slate-500">
+    <p>LexMetrix — Legal Metrology Automated Compliance System • Department of Consumer Affairs (DoCA), Ministry of Consumer Affairs, Food & Public Distribution</p>
+    <p class="text-[10px] text-slate-400 mt-1">Built strictly under Legal Metrology Act, 2009 & Legal Metrology (Packaged Commodities) Rules, 2011</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

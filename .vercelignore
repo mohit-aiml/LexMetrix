@@ -1,0 +1,11 @@
+.git
+.gitignore
+tests
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+data/*.db
+run.bat
+run.ps1

@@ -1,0 +1,69 @@
+/* LexMetrix Custom Stylesheet */
+
+@keyframes pulseSubtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.85; }
+}
+
+.tab-btn.active-tab {
+  background-color: rgba(245, 158, 11, 0.18);
+  color: #FBBF24;
+  border-bottom: 2px solid #F59E0B;
+}
+
+/* Mobile Simulator Frame Mode */
+body.mobile-mode {
+  background-color: #0F172A;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+body.mobile-mode #app-container {
+  max-width: 430px !important;
+  margin: 20px auto;
+  border: 12px solid #1E293B;
+  border-radius: 44px;
+  background-color: #F8FAFC;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  position: relative;
+}
+
+body.mobile-mode #app-container::before {
+  content: "";
+  display: block;
+  width: 140px;
+  height: 24px;
+  background-color: #1E293B;
+  border-radius: 0 0 14px 14px;
+  margin: 0 auto 12px auto;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F1F5F9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+/* Evidentiary highlighting transitions */
+.highlight-row {
+  transition: background-color 0.2s ease;
+}
+
+.highlight-row:hover {
+  background-color: rgba(59, 130, 246, 0.05);
+}
