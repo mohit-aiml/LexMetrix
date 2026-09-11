@@ -79,9 +79,12 @@ async function loadSamples() {
     container.innerHTML = "";
 
     samples.forEach(s => {
-      const badgeColor = s.expected_verdict === "COMPLIANT" ? "bg-emerald-100 text-emerald-800 border-emerald-300" :
-                         s.expected_verdict === "NON_COMPLIANT" ? "bg-red-100 text-red-800 border-red-300" :
-                         "bg-amber-100 text-amber-800 border-amber-300";
+      const ev = s.expected_verdict || "";
+      const badgeColor = ev.includes("100") || ev === "COMPLIANT"
+        ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+        : ev.includes("BLUR") || ev.includes("WARNING")
+        ? "bg-amber-100 text-amber-800 border-amber-300"
+        : "bg-red-100 text-red-800 border-red-300";
 
       const card = document.createElement("div");
       card.className = "bg-slate-50 hover:bg-white border border-slate-200 hover:border-blue-400 rounded-xl p-3 cursor-pointer transition shadow-xs hover:shadow-md flex flex-col justify-between";
@@ -362,6 +365,13 @@ function renderInspectionResults(data) {
     title.className = "text-xl font-black tracking-tight text-emerald-900";
     scoreBadge.className = "px-2.5 py-0.5 rounded-full text-xs font-extrabold font-mono bg-emerald-200 text-emerald-900";
     subtitle.innerText = "All mandatory declarations meet Legal Metrology (PC) Rules, 2011";
+  } else if (status === "BLUR_WARNING") {
+    banner.className = "rounded-2xl p-5 border shadow-sm transition bg-amber-50/70 border-amber-400 text-amber-950";
+    iconContainer.className = "w-12 h-12 rounded-xl flex items-center justify-center text-white bg-amber-500";
+    title.innerText = "BLUR WARNING — RETAKE REQUIRED";
+    title.className = "text-xl font-black tracking-tight text-amber-900";
+    scoreBadge.className = "px-2.5 py-0.5 rounded-full text-xs font-extrabold font-mono bg-amber-200 text-amber-900";
+    subtitle.innerText = "Image rejected: Laplacian blur score below evidentiary threshold of 75. Retake photo in better lighting with a steady hand.";
   } else if (status === "NON_COMPLIANT") {
     banner.className = "rounded-2xl p-5 border shadow-sm transition bg-red-50/70 border-red-300 text-red-950";
     iconContainer.className = "w-12 h-12 rounded-xl flex items-center justify-center text-white bg-red-600";
@@ -375,7 +385,7 @@ function renderInspectionResults(data) {
     title.innerText = "REVIEW RECOMMENDED";
     title.className = "text-xl font-black tracking-tight text-amber-900";
     scoreBadge.className = "px-2.5 py-0.5 rounded-full text-xs font-extrabold font-mono bg-amber-200 text-amber-900";
-    subtitle.innerText = "Minor technical packaging defects or blur detected; advisory notice recommended";
+    subtitle.innerText = "Minor packaging defects detected — advisory rectification notice recommended";
   }
   scoreBadge.innerText = `${score}%`;
 
@@ -459,6 +469,13 @@ function renderStatutoryChecklist(data) {
       required: "4 Pillars: Contact Person/Designation, Address, Phone & Email",
       found: `Helpline: ${ext.consumer_care?.phone || 'None'} | Email: ${ext.consumer_care?.email || 'None'}`,
       status: evalMap["RULE_6_1_N_CONSUMER_CARE"]?.status || "FAIL"
+    },
+    {
+      rule_id: "RULE_6_1_F_BATCH",
+      title: "Rule 6(1)(f) — Batch / Lot / Code Number",
+      required: "Batch No. / Lot No. / B.No. for traceability",
+      found: ext.batch?.batch_number ? `Batch: ${ext.batch.batch_number}` : "Not detected",
+      status: evalMap["RULE_6_1_F_BATCH"]?.status || "FAIL"
     },
     {
       rule_id: "RULE_5_FONT_SIZE",
@@ -670,6 +687,7 @@ function renderRecentTable(items) {
     
     const badgeColor = it.compliance_status === "COMPLIANT" ? "bg-emerald-100 text-emerald-800" :
                        it.compliance_status === "NON_COMPLIANT" ? "bg-red-100 text-red-800" :
+                       it.compliance_status === "BLUR_WARNING" ? "bg-amber-100 text-amber-800" :
                        "bg-amber-100 text-amber-800";
 
     tr.innerHTML = `

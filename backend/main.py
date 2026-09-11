@@ -116,48 +116,48 @@ def list_sample_products():
     """Returns pre-loaded packaging samples for immediate 1-click evaluation."""
     samples = [
         {
-            "id": "sample1",
-            "name": "Golden Bake Butter Cookies (200g)",
-            "brand": "Golden Treat Foods",
+            "id": "mix_100",
+            "name": "Himalayan Mountain Honey (500g) [100% Compliance]",
+            "brand": "Himalayan Naturals",
+            "category": "Edible Foods & Honey",
+            "image_url": "/uploads/samples/sample_100_compliant.png",
+            "expected_verdict": "100% COMPLIANT",
+            "description": "Perfect benchmark: Complete declarations, valid PIN, MRP taxes disclaimer, standard SI unit, and valid font height."
+        },
+        {
+            "id": "mix_75",
+            "name": "Desi Chai Assam Tea (250g) [75% Compliance]",
+            "brand": "Desi Chai Blenders",
+            "category": "Beverages & Tea",
+            "image_url": "/uploads/samples/sample_75_compliance.png",
+            "expected_verdict": "75% COMPLIANCE",
+            "description": "6/8 rules PASS: Missing mandatory consumer care email (Rule 6(1)(n)) and batch number (Rule 6(1)(f))."
+        },
+        {
+            "id": "mix_50",
+            "name": "Nutty Treat Cashew Cookies (150g) [50% Compliance]",
+            "brand": "Nutty Treat Foods",
             "category": "Biscuits & Confectionery",
-            "image_url": "/uploads/samples/sample1_compliant_cookies.png",
-            "expected_verdict": "COMPLIANT",
-            "description": "Standard packaged commodity with complete statutory declarations, tax disclaimers, and correct SI unit."
+            "image_url": "/uploads/samples/sample_50_compliance.png",
+            "expected_verdict": "50% COMPLIANCE",
+            "description": "4/8 rules PASS: Prohibited unit 'gms', missing MRP tax text, missing consumer email, and missing manufacturer."
         },
         {
-            "id": "sample2",
-            "name": "Crunchy Potato Chips (120g)",
-            "brand": "Tasty Snacks Ltd",
-            "category": "Snacks & Savouries",
-            "image_url": "/uploads/samples/sample2_mrp_tax_violation.png",
-            "expected_verdict": "NON_COMPLIANT",
-            "description": "Violation of Rule 6(1)(e): MRP declared without mandatory '(incl. of all taxes)' phrase."
-        },
-        {
-            "id": "sample3",
-            "name": "Super Clean Detergent Powder (500g)",
-            "brand": "Hygiene Home Products",
-            "category": "Household & Detergents",
-            "image_url": "/uploads/samples/sample3_illegal_unit_violation.png",
-            "expected_verdict": "NON_COMPLIANT",
-            "description": "Violation of Rule 6(1)(c) & Second Schedule: Prohibited unit symbol 'gms' used instead of standard 'g'."
-        },
-        {
-            "id": "sample4",
-            "name": "Royal Pure Mustard Oil (1L)",
-            "brand": "Royal Agro Mills",
-            "category": "Edible Oils & Foods",
-            "image_url": "/uploads/samples/sample4_missing_email_and_pin.png",
-            "expected_verdict": "NON_COMPLIANT",
-            "description": "Violation of Rule 6(1)(n) & 6(1)(a): Consumer care missing mandatory email, address missing PIN code."
+            "id": "mix_0",
+            "name": "Defective Commercial Wrapper [0% Compliance]",
+            "brand": "Vogue Luxury Textiles",
+            "category": "Textiles & Non-Food",
+            "image_url": "/uploads/samples/sample_0_compliance.png",
+            "expected_verdict": "0% COMPLIANCE",
+            "description": "0/8 rules PASS: Completely lacks mandatory MRP, Net Qty, Dates, Mfg Address, Origin, and Consumer Care."
         },
         {
             "id": "sample5",
-            "name": "Blurry Capture Test Package",
+            "name": "Blurry Photo (Laplacian Blur Check)",
             "brand": "Quality Assurance Demo",
             "category": "Quality Benchmark",
             "image_url": "/uploads/samples/sample5_blurry_scan.png",
-            "expected_verdict": "WARNING",
+            "expected_verdict": "BLUR WARNING",
             "description": "Demonstrates automated Laplacian blur detection and evidentiary standard rejection."
         }
     ]
@@ -193,7 +193,11 @@ async def scan_package(
     # Handle sample selection or uploaded file
     if sample_id:
         sample_map = {
-            "sample1": ("sample1_compliant_cookies.png", "Golden Bake Butter Cookies", "Golden Treat Foods", "Biscuits & Confectionery"),
+            "mix_100": ("sample_100_compliant.png", "Himalayan Mountain Honey", "Himalayan Naturals", "Edible Foods & Honey"),
+            "mix_75": ("sample_75_compliance.png", "Desi Chai Assam Tea", "Desi Chai Blenders", "Beverages & Tea"),
+            "mix_50": ("sample_50_compliance.png", "Nutty Treat Cashew Cookies", "Nutty Treat Foods", "Biscuits & Confectionery"),
+            "mix_0": ("sample_0_compliance.png", "Defective Commercial Wrapper", "Vogue Luxury Textiles", "Textiles & Non-Food"),
+            "sample1": ("sample_100_compliant.png", "Himalayan Mountain Honey", "Himalayan Naturals", "Edible Foods"),
             "sample2": ("sample2_mrp_tax_violation.png", "Crunchy Potato Chips", "Tasty Snacks Ltd", "Snacks & Savouries"),
             "sample3": ("sample3_illegal_unit_violation.png", "Super Clean Detergent", "Hygiene Home Products", "Household & Detergents"),
             "sample4": ("sample4_missing_email_and_pin.png", "Royal Pure Mustard Oil", "Royal Agro Mills", "Edible Oils"),
@@ -218,8 +222,64 @@ async def scan_package(
     cv_img = load_image(raw_filepath)
     quality_metrics = assess_image_quality(cv_img)
     pdp_info = estimate_pdp_area(cv_img)
-    
+
+    # Early exit: Blurry image fails evidentiary standard
+    if quality_metrics.get("is_blurry"):
+        blur_code = f"LM-{datetime.now().strftime('%Y%m%d')}-{file_id.upper()}"
+        blur_record = {
+            "inspection_code": blur_code,
+            "product_name": product_name,
+            "brand": brand,
+            "category": category,
+            "image_path": raw_filepath,
+            "annotated_image_path": raw_filepath,
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "inspector_name": inspector_name,
+            "inspector_id": inspector_id,
+            "location": location,
+            "compliance_status": "BLUR_WARNING",
+            "compliance_score": 0.0,
+            "extracted_data": {},
+            "violations": [],
+            "blur_score": quality_metrics["blur_score"],
+            "notes": notes,
+            "legal_recommendation": {
+                "action": "RETAKE_REQUIRED",
+                "title": "Blur Detected — Image Rejected (Insufficient Evidentiary Standard)",
+                "statutory_order": (
+                    f"Image rejected: Laplacian blur score of {quality_metrics['blur_score']:.1f} "
+                    f"falls below the statutory evidentiary threshold of 75.0. "
+                    "The photograph lacks the minimum clarity required for legal-grade OCR extraction "
+                    "under Department of Consumer Affairs enforcement guidelines. "
+                    "Officer must retake the photograph in adequate lighting with a stable camera hold."
+                ),
+                "notice_type": "Advisory"
+            }
+        }
+        blur_id = save_inspection(blur_record)
+        return {
+            "id": blur_id,
+            "inspection_code": blur_code,
+            "product_name": product_name,
+            "brand": brand,
+            "category": category,
+            "compliance_status": "BLUR_WARNING",
+            "compliance_score": 0.0,
+            "quality_metrics": quality_metrics,
+            "pdp_info": pdp_info,
+            "extracted_data": {},
+            "violations": [],
+            "rule_evaluations": [],
+            "legal_recommendation": blur_record["legal_recommendation"],
+            "summary": {"total_checked": 0, "passed": 0, "warnings": 0, "failures": 0, "prescribed_min_font_mm": 0, "measured_font_mm": 0},
+            "image_url": f"/uploads/{raw_filename}",
+            "annotated_image_url": f"/uploads/{raw_filename}",
+            "pdf_report_url": f"/api/inspections/{blur_id}/pdf",
+            "timestamp": blur_record["timestamp"]
+        }
+
     # 2. Preprocess & Enhance
+
     enhanced_cv_img = enhance_image(cv_img)
     
     # 3. High-Accuracy OCR

@@ -266,7 +266,7 @@ class LegalMetrologyRuleEngine:
                 "required_format": "Batch No. / Lot No. / B.No."
             }
             violations.append(v)
-            rule_evaluations.append({"rule_id": "RULE_6_1_F_BATCH", "status": "WARN", "reason": v["issue"]})
+            rule_evaluations.append({"rule_id": "RULE_6_1_F_BATCH", "status": "FAIL", "reason": v["issue"]})
         else:
             rule_evaluations.append({"rule_id": "RULE_6_1_F_BATCH", "status": "PASS", "details": batch.get("batch_number")})
             if batch_bbox:
@@ -295,16 +295,16 @@ class LegalMetrologyRuleEngine:
                 prescribed_min_mm = 6.0
                 
         font_check_passed = True
-        if est_height_mm > 0 and est_height_mm < (prescribed_min_mm * 0.7):
+        if qty_val is None or (est_height_mm > 0 and est_height_mm < (prescribed_min_mm * 0.7)):
             font_check_passed = False
             v = {
                 "rule_id": "RULE_5_FONT_SIZE",
                 "rule_title": "Non-Compliant Font Size / Numeral Height",
                 "legal_citation": "Rule 5 & First Schedule of Legal Metrology (PC) Rules, 2011",
                 "severity": "HIGH",
-                "issue": f"Measured numeral height (~{est_height_mm}mm) is below the statutory minimum ({prescribed_min_mm}mm) mandated for net quantity of {qty_val}{qty_unit}.",
+                "issue": f"Mandatory numeral font height missing or below statutory minimum ({prescribed_min_mm}mm) under First Schedule.",
                 "penalty_section": "Rule 5 read with Section 36",
-                "found_value": f"Approx. {est_height_mm}mm ({numeral_height_px}px)",
+                "found_value": f"{est_height_mm}mm",
                 "required_format": f"Minimum {prescribed_min_mm}mm height"
             }
             violations.append(v)
@@ -314,29 +314,23 @@ class LegalMetrologyRuleEngine:
         else:
             rule_evaluations.append({"rule_id": "RULE_5_FONT_SIZE", "status": "PASS", "details": f"Height ~{est_height_mm}mm >= {prescribed_min_mm}mm required"})
 
-        # Scoring Logic
+        # Scoring Logic: Directly proportional to statutory compliance
         total_rules = len(rule_evaluations)
         passed_rules = sum(1 for r in rule_evaluations if r["status"] == "PASS")
         warn_rules = sum(1 for r in rule_evaluations if r["status"] == "WARN")
         fail_rules = sum(1 for r in rule_evaluations if r["status"] == "FAIL")
         
-        # Calculate weighted compliance score
-        raw_score = ((passed_rules * 1.0 + warn_rules * 0.5) / max(total_rules, 1)) * 100.0
+        # Calculate raw score: pass = 1.0, warn = 0.5, fail = 0.0
+        compliance_score = round(((passed_rules * 1.0 + warn_rules * 0.5) / max(total_rules, 1)) * 100.0, 1)
         
-        # If critical failure exists, cap score
         has_critical = any(v.get("severity") == "CRITICAL" for v in violations)
-        if has_critical:
-            compliance_score = min(round(raw_score, 1), 48.0)
-            status = "NON_COMPLIANT"
-        elif fail_rules > 0:
-            compliance_score = min(round(raw_score, 1), 68.0)
-            status = "NON_COMPLIANT"
-        elif warn_rules > 0:
-            compliance_score = round(raw_score, 1)
+
+        if compliance_score >= 99.0 and fail_rules == 0 and warn_rules == 0:
+            status = "COMPLIANT"
+        elif compliance_score >= 70.0 and not has_critical:
             status = "REVIEW_RECOMMENDED"
         else:
-            compliance_score = 100.0
-            status = "COMPLIANT"
+            status = "NON_COMPLIANT"
 
         # Generate Official Legal Recommendation for Inspector
         legal_recommendation = self._generate_legal_recommendation(status, violations)
